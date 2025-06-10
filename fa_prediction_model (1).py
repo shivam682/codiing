@@ -31,11 +31,10 @@ class CrashDataset(Dataset):
                     data = json.load(f)
                     self.samples.append(data)
 
-        self.label2idx = {label: idx for idx, label in enumerate(set(s['functional_area'] for s in self.samples))}
+        self.label2idx = {label: idx for idx, label in enumerate(set(s['functional_area'] for s in self.samples if s.get('functional_area')))}
         self.idx2label = {v: k for k, v in self.label2idx.items()}
 
     def clean_text(self, text):
-        # Get tail of logs or truncate to max_length tokens
         return text[-4000:] if len(text) > 4000 else text
 
     def __len__(self):
@@ -43,26 +42,25 @@ class CrashDataset(Dataset):
 
     def __getitem__(self, idx):
         sample = self.samples[idx]
-        crash_type = sample['type']
+        crash_type = sample.get('type', '')
 
-        jira_summary = self.clean_text(sample.get('jira_summary', ''))
+        jira_summary = self.clean_text(sample.get('jira_summary', '') or '')
         inputs = {
             'jira': self.tokenizer(jira_summary, return_tensors='pt', truncation=True, padding='max_length', max_length=self.max_length)
         }
 
         if crash_type == 'firmware':
-            fw_log = self.clean_text(sample.get('wlan_fw_log', ''))
-            callstack = self.clean_text(sample.get('callstack', ''))
+            fw_log = self.clean_text(sample.get('wlan_fw_log', '') or '')
+            callstack = self.clean_text(sample.get('callstack', '') or '')
             inputs['fw_log'] = self.tokenizer(fw_log, return_tensors='pt', truncation=True, padding='max_length', max_length=self.max_length)
             inputs['callstack'] = self.tokenizer(callstack, return_tensors='pt', truncation=True, padding='max_length', max_length=self.max_length)
         else:
-            dmesg = self.clean_text(sample.get('dmesg', ''))
-            driver = self.clean_text(sample.get('wlan_driver_log', ''))
+            dmesg = self.clean_text(sample.get('dmesg', '') or '')
+            driver = self.clean_text(sample.get('wlan_driver_log', '') or '')
             inputs['dmesg'] = self.tokenizer(dmesg, return_tensors='pt', truncation=True, padding='max_length', max_length=self.max_length)
             inputs['driver'] = self.tokenizer(driver, return_tensors='pt', truncation=True, padding='max_length', max_length=self.max_length)
 
-        label = self.label2idx[sample['functional_area']]
-
+        label = self.label2idx.get(sample.get('functional_area', ''), -1)
         return inputs, label
 
 # -----------------------------
