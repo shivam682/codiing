@@ -25,6 +25,7 @@ def ensure_weaviate_schema():
                     {"name": "jira_id", "dataType": ["text"]},
                     {"name": "log_type", "dataType": ["text"]},
                     {"name": "filename", "dataType": ["text"]},
+                    {"name": "description", "dataType": ["text"]},
                     {"name": "chunk_index", "dataType": ["int"]},
                     {"name": "content", "dataType": ["text"]}
                 ]
@@ -67,6 +68,7 @@ def chunk_and_embed_selected_logs(jira_id: str, log_dir: str, log_types: List[st
             if log_type in fname:
                 with open(os.path.join(log_dir, fname), 'r', errors='ignore') as f:
                     content = f.read()
+                description = f"Chunked from {fname} containing log type {log_type}"
                 chunks = text_splitter.split_text(content)
                 for i, chunk in enumerate(chunks):
                     embedding = embedding_model.embed_query(chunk)
@@ -75,6 +77,7 @@ def chunk_and_embed_selected_logs(jira_id: str, log_dir: str, log_types: List[st
                             "jira_id": jira_id,
                             "log_type": log_type,
                             "filename": fname,
+                            "description": description,
                             "chunk_index": i,
                             "content": chunk
                         },
@@ -93,3 +96,33 @@ def clear_temp_crash_logs(jira_id: str):
             "valueText": jira_id
         }
     )
+
+
+def chunk_and_index_log_folder(jira_id: str, log_dir: str):
+    """
+    Chunk all files in a folder into logical parts and embed into Weaviate.
+    This allows structured retrieval of any part later.
+    """
+    ensure_weaviate_schema()
+    for fname in os.listdir(log_dir):
+        full_path = os.path.join(log_dir, fname)
+        if os.path.isfile(full_path):
+            with open(full_path, 'r', errors='ignore') as f:
+                content = f.read()
+            log_type = os.path.splitext(fname)[0]  # crude log type from filename
+            description = f"Chunks from file {fname} assumed to contain log type {log_type}"
+            chunks = text_splitter.split_text(content)
+            for i, chunk in enumerate(chunks):
+                embedding = embedding_model.embed_query(chunk)
+                client.data_object.create(
+                    data_object={
+                        "jira_id": jira_id,
+                        "log_type": log_type,
+                        "filename": fname,
+                        "description": description,
+                        "chunk_index": i,
+                        "content": chunk
+                    },
+                    class_name="CrashLog",
+                    vector=embedding
+                )
