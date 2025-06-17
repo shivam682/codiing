@@ -38,7 +38,11 @@ def predict_functional_area(json_path, model_path="fa_classifier.pt", data_path=
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model.to(device)
     model.eval()
-
+torch.manual_seed(42)
+torch.cuda.manual_seed(42)
+torch.cuda.manual_seed_all(42)
+torch.backends.cudnn.deterministic = True
+torch.backends.cudnn.benchmark = False
     # Predict
     with torch.no_grad():
         outputs = model({k: v.to(device) for k, v in inputs.items()})
