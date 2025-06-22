@@ -84,23 +84,15 @@ tools = [
 
 log_explorer_agent = initialize_agent(tools, llm, agent_type="zero-shot-react-description", verbose=True)
 
-# --- LangGraph Nodes ---
-
-def index_crs(state):
-    if QDRANT_COLLECTION in qdrant_client.get_collections().collections:
-        qdrant_client.delete_collection(collection_name=QDRANT_COLLECTION)
-
-    qdrant_client.create_collection(
+# --- Optional: Index CRs Function ---
+def index_crs():
+    qdrant_client.recreate_collection(
         collection_name=QDRANT_COLLECTION,
         vectors_config=VectorParams(size=1536, distance=Distance.COSINE),
     )
 
-    store = QdrantStore(
-        client=qdrant_client,
-        collection_name=QDRANT_COLLECTION,
-        embedding=embedding_model
-    )
-
+    texts = []
+    metadatas = []
     for fname in os.listdir(CR_JSON_FOLDER):
         if not fname.endswith(".json"):
             continue
@@ -111,8 +103,17 @@ def index_crs(state):
             summary = data.get("summary", "")
             crash_signature = data.get("crash_signature", "")
             index_text = f"{crash_signature}\n{summary}" if crash_signature else summary
-            store.add_texts([index_text], metadatas=[{"cr_number": cr_number, "full_data": data}])
-    return {"status": "indexed_crs"}
+            texts.append(index_text)
+            metadatas.append({"cr_number": cr_number, "full_data": data})
+
+    store = QdrantStore(
+        client=qdrant_client,
+        collection_name=QDRANT_COLLECTION,
+        embedding=embedding_model,
+    )
+    store.add_texts(texts, metadatas=metadatas)
+
+# --- LangGraph Nodes ---
 
 def read_jira(state):
     with open(NEW_JIRA_PATH, "r", encoding="utf-8") as f:
@@ -169,13 +170,11 @@ def compare_crs_with_jira(state):
 
 # --- LangGraph Setup ---
 workflow = StateGraph()
-workflow.add_node("index_crs", index_crs)
 workflow.add_node("read_jira", read_jira)
 workflow.add_node("find_similar", find_similar_crs)
 workflow.add_node("compare", compare_crs_with_jira)
 
-workflow.set_entry_point("index_crs")
-workflow.add_edge("index_crs", "read_jira")
+workflow.set_entry_point("read_jira")
 workflow.add_edge("read_jira", "find_similar")
 workflow.add_edge("find_similar", "compare")
 workflow.add_edge("compare", END)
@@ -183,6 +182,16 @@ workflow.add_edge("compare", END)
 app = workflow.compile()
 
 if __name__ == "__main__":
-    final = app.invoke({})
-    print("\n\n=== Final Comparison Report ===\n")
-    print(final["comparison_report"])
+    import argparse
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--index", action="store_true", help="Index CRs into Qdrant")
+    args = parser.parse_args()
+
+    if args.index:
+        index_crs()
+        print("CRs indexed successfully.")
+    else:
+        final = app.invoke({})
+        print("\n\n=== Final Comparison Report ===\n")
+        print(final["comparison_report"])
