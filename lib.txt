@@ -1,0 +1,7 @@
+pip install openai
+pip install langchain
+pip install langgraph
+pip install qdrant-client
+pip install langchain-community
+pip install rapidfuzz
+pip install scikit-learn
