@@ -1,0 +1,20 @@
+final_prompt = f"""
+Compare the following crash report with CR {cr_number} and return a JSON object with:
+- cr_number: string
+- similarity_score: a float between 0 and 1 representing how likely the new crash matches
+- justification: brief explanation for the score
+
+CR Summary:
+{cr.page_content}
+
+CR Callstack (if any):
+{full_data.get('callstack', 'N/A')}
+
+JIRA Summary and Callstack:
+{jira_text}
+
+Matched Logs from New Dump:
+{'\n\n'.join(matched_log_responses)}
+
+Respond only with a valid JSON object.
+"""
