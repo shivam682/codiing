@@ -1,4 +1,11 @@
-def match_log_snippet_in_dump(snippet, window_size=10):
+def match_log_snippet_in_dump(snippet_lines, window_size=10):
+    """
+    snippet_lines: List[str] - lines from the old CR log group
+    """
+    snippet = "\n".join(snippet_lines).strip()
+    if not snippet:
+        return "Snippet is empty."
+
     best_match = ("", 0.0, "", 0)  # content, score, filename, line number
     snippet_embedding = get_embedding(snippet)
 
@@ -9,7 +16,8 @@ def match_log_snippet_in_dump(snippet, window_size=10):
                 with open(fpath, "r", encoding="utf-8", errors="ignore") as f:
                     lines = f.readlines()
                     for i in range(len(lines) - window_size + 1):
-                        block = "".join(lines[i:i+window_size]).strip()
+                        block_lines = lines[i:i+window_size]
+                        block = "\n".join(line.strip() for line in block_lines).strip()
                         if not block:
                             continue
                         block_embedding = get_embedding(block)
