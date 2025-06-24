@@ -1,3 +1,15 @@
+def hybrid_score(text1, text2):
+    """Combine cosine and fuzzy score"""
+    try:
+        emb1 = get_embedding(text1)
+        emb2 = get_embedding(text2)
+        cos_sim = cosine_similarity([emb1], [emb2])[0][0]
+    except:
+        cos_sim = 0
+
+    fuzz_sim = fuzz.partial_ratio(text1, text2) / 100.0
+    return 0.6 * cos_sim + 0.4 * fuzz_sim  # adjust weights as needed
+
 def find_similar_crs(state):
     jira_text = state["jira_text"]
     store = QdrantStore(
@@ -5,16 +17,18 @@ def find_similar_crs(state):
         collection_name=QDRANT_COLLECTION,
         embedding=embedding_model
     )
+    
     initial_results = store.similarity_search(jira_text, k=10)
 
-    def hybrid_score(cr):
-        cr_text = cr.page_content
-        sem_score = cosine_similarity(
-            [get_embedding(jira_text)],
-            [get_embedding(cr_text)]
-        )[0][0]
-        fuzzy = fuzz.partial_ratio(jira_text, cr_text) / 100.0
-        return 0.7 * sem_score + 0.3 * fuzzy
+    # Refine results using hybrid scoring
+    scored = []
+    for cr in initial_results:
+        score = hybrid_score(jira_text, cr.page_content)
+        scored.append((score, cr))
+    
+    top_3 = sorted(scored, key=lambda x: x[0], reverse=True)[:3]
+    return {
+        "similar_crs": [cr for _, cr in top_3],
+        "jira_text": jira_text
+    }
 
-    reranked = sorted(initial_results, key=hybrid_score, reverse=True)[:5]
-    return {"similar_crs": reranked, "jira_text": jira_text}
